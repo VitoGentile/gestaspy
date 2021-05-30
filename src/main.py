@@ -1,5 +1,6 @@
 import argparse
-from core import start_game
+from game import start_game
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Start PyNoStress game')

@@ -1,29 +1,27 @@
 import copy
 import glob
-import math
+import kinect
 import mss
 import numpy as np
 import os
 import pygame
 import random
 import sys
+from from_root import from_root
 from PIL import Image, ImageOps
 from pykinect2 import PyKinectV2
 from pykinect2 import PyKinectRuntime
 from threading import Timer
 
-CRACK_PATHS = glob.glob(os.path.join("assets", "cracks", "*.png"))
-PUNCH_PATH = os.path.join("assets", "punch.png")
-CRACK_SOUNDS = glob.glob(os.path.join("assets", "audio", "*.wav"))
-
-
-def dist(j1, j2):
-    return math.sqrt(((j1.Position.x - j2.Position.x)**2) + ((j1.Position.y - j2.Position.y)**2) + ((j1.Position.z - j2.Position.z)**2))
+CRACK_PATHS = glob.glob(os.path.join(from_root("assets"), "cracks", "*.png"))
+PUNCH_PATH = os.path.join(from_root("assets"), "punch.png")
+CRACK_SOUNDS = glob.glob(os.path.join(from_root("assets"), "audio", "*.wav"))
 
 
 class BodyGameRuntime(object):
     def __init__(self, background_img, windowed_mode, show_pip):
         pygame.init()
+        pygame.mouse.set_visible(False)
 
         # Init pygame mixer and load each song in each channel
         pygame.mixer.init()
@@ -35,9 +33,6 @@ class BodyGameRuntime(object):
         # True means the user wants a PiP is shown on the bottom right
         self._show_pip = show_pip
 
-        # Used to manage how fast the screen updates
-        self._clock = pygame.time.Clock()
-
         # Set the width and height of the screen [width, height]
         self._infoObject = pygame.display.Info()
 
@@ -48,17 +43,17 @@ class BodyGameRuntime(object):
         else:
             self._screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
 
-        pygame.display.set_caption("PyNoStress")
+        pygame.display.set_caption("gestaspy")
 
         # Used to manage how fast the screen updates
         self._clock = pygame.time.Clock()
 
         # Kinect runtime object, we want IR if show_pip, and body frames always
         if show_pip:
-            self._kinect = PyKinectRuntime.PyKinectRuntime(
-                PyKinectV2.FrameSourceTypes_Infrared | PyKinectV2.FrameSourceTypes_Body)
+            flags = (PyKinectV2.FrameSourceTypes_Infrared, PyKinectV2.FrameSourceTypes_Body)
         else:
-            self._kinect = PyKinectRuntime.PyKinectRuntime(PyKinectV2.FrameSourceTypes_Body)
+            flags = (PyKinectV2.FrameSourceTypes_Body,)
+        self._kinect = kinect.KinectManager(flags)
 
         # init frame surface with screenshot
         self._background_img = background_img
@@ -114,11 +109,11 @@ class BodyGameRuntime(object):
             "x": 0.5 * (joint_neck.Position.x + joint_spine.Position.x),
             "y": 0.5 * (joint_neck.Position.y + joint_spine.Position.y)
         }
-        shoulders_length = dist(joint_shoulder_r, joint_neck) + dist(joint_shoulder_l, joint_neck) * 0.7
-        neck_spine_length = dist(joint_neck, joint_spine) * 1.5
+        shoulders_length = (kinect.joint_distance(joint_shoulder_r, joint_neck) + kinect.joint_distance(joint_shoulder_l, joint_neck))
+        neck_spine_length = kinect.joint_distance(joint_neck, joint_spine) * 1.5
 
-        l_arm_length = dist(joint_shoulder_l, joint_elbow_l) + dist(joint_elbow_l, joint_wrist_l)
-        r_arm_length = dist(joint_shoulder_r, joint_elbow_r) + dist(joint_elbow_r, joint_wrist_r)
+        l_arm_length = kinect.joint_distance(joint_shoulder_l, joint_elbow_l) + kinect.joint_distance(joint_elbow_l, joint_wrist_l)
+        r_arm_length = kinect.joint_distance(joint_shoulder_r, joint_elbow_r) + kinect.joint_distance(joint_elbow_r, joint_wrist_r)
 
         screen_w = self._frame_surface.get_width()
         screen_h = self._frame_surface.get_height()
@@ -153,7 +148,10 @@ class BodyGameRuntime(object):
         if not self._can_punch:
             return
 
-        crack = Image.open(random.choice(CRACK_PATHS))
+        crack = Image.open(random.choice(CRACK_PATHS)).convert("RGBA")
+        screen_w = self._frame_surface.get_width()
+        crack.thumbnail([int(screen_w * (0.1 + (random.random())/9)), sys.maxsize], Image.ANTIALIAS)
+
         self._background_img.paste(crack, (x, y), crack)
         backup_img.paste(crack, (x, y), crack)
 
@@ -166,21 +164,22 @@ class BodyGameRuntime(object):
     def add_punch(self, x, y, alpha=255, flip=False):
         # Draw the punch at specific location, with specific size and opacity based on alpha
         punch = Image.open(PUNCH_PATH)
-        screen_w = self._screen.get_width()
-        pip_w = int(screen_w * 0.15 * (0.5 + (alpha/150)))
+        screen_w = self._frame_surface.get_width()
+        pip_w = int(screen_w * 0.1 * ((0.2 + (alpha/170))**1.8))
 
         if pip_w <= 0:
             return
 
         punch.thumbnail([pip_w, sys.maxsize], Image.ANTIALIAS)
 
+        a = int((alpha**3)/65025)
         pixels = punch.getdata()
         new_pixels = []
         for item in pixels:
             if item[3] < 200:
                 new_pixels.append(item)
             else:
-                new_pixels.append((item[0], item[1], item[2], alpha))
+                new_pixels.append((item[0], item[1], item[2], a))
         punch.putdata(new_pixels)
 
         if flip:
@@ -190,13 +189,15 @@ class BodyGameRuntime(object):
 
     def add_pip(self):
         # add PiP
-        f = self._kinect.get_last_infrared_frame()
+        f = self._kinect.get_ir_frame()
+        if f is None:
+            return
 
         ir_f8 = np.uint8(f.clip(1, 4000) / 16.)
         ir_frame8bit = np.dstack((ir_f8, ir_f8, ir_f8))
         ir_rgb = np.array(ir_frame8bit)
-        ir_rgb = ir_rgb.reshape((self._kinect.infrared_frame_desc.Height, self._kinect.infrared_frame_desc.Width, 3),
-                                order='C')
+        ir_h, ir_w = self._kinect.get_ir_size()
+        ir_rgb = ir_rgb.reshape((ir_h, ir_w, 3), order='C')
 
         im_pil = Image.fromarray(ir_rgb).convert("RGBA")
 
@@ -218,29 +219,29 @@ class BodyGameRuntime(object):
             self._l_velocity = None
             l_acc = None
         elif len(self._hl) == 2:
-            self._l_velocity = dist(self._hl[0], self._hl[1])
+            self._l_velocity = kinect.joint_distance(self._hl[0], self._hl[1])
             l_acc = None
         elif len(self._hl) == 3:
-            self._l_velocity = dist(self._hl[1], self._hl[2])
-            l_acc = self._l_velocity - dist(self._hl[1], self._hl[0])
+            self._l_velocity = kinect.joint_distance(self._hl[1], self._hl[2])
+            l_acc = self._l_velocity - kinect.joint_distance(self._hl[1], self._hl[0])
         else:
             del self._hl[0]
-            self._l_velocity = dist(self._hl[1], self._hl[2])
-            l_acc = self._l_velocity - dist(self._hl[1], self._hl[0])
+            self._l_velocity = kinect.joint_distance(self._hl[1], self._hl[2])
+            l_acc = self._l_velocity - kinect.joint_distance(self._hl[1], self._hl[0])
 
         if len(self._hr) == 1:
             self._r_velocity = None
             r_acc = None
         elif len(self._hr) == 2:
-            self._r_velocity = dist(self._hr[0], self._hr[1])
+            self._r_velocity = kinect.joint_distance(self._hr[0], self._hr[1])
             r_acc = None
         elif len(self._hr) == 3:
-            self._r_velocity = dist(self._hr[1], self._hr[2])
-            r_acc = self._r_velocity - dist(self._hr[1], self._hr[0])
+            self._r_velocity = kinect.joint_distance(self._hr[1], self._hr[2])
+            r_acc = self._r_velocity - kinect.joint_distance(self._hr[1], self._hr[0])
         else:
             del self._hr[0]
-            self._r_velocity = dist(self._hr[1], self._hr[2])
-            r_acc = self._r_velocity - dist(self._hr[1], self._hr[0])
+            self._r_velocity = kinect.joint_distance(self._hr[1], self._hr[2])
+            r_acc = self._r_velocity - kinect.joint_distance(self._hr[1], self._hr[0])
 
         return l_acc, r_acc
 
@@ -265,19 +266,16 @@ class BodyGameRuntime(object):
             if must_exit:
                 break
 
-            if self._kinect.has_new_body_frame():
-                self._bodies = self._kinect.get_last_body_frame()
-            else:
-                self._bodies = None
+            self._bodies = self._kinect.get_body_frame()
 
-            if self._show_pip and self._kinect.has_new_infrared_frame():
+            if self._show_pip:
                 self.add_pip()
 
             # Save background image before adding additional stuff
             background_img_before_punch = copy.deepcopy(self._background_img)
 
             if self._bodies is not None:
-                for i in range(0, self._kinect.max_body_count):
+                for i in range(0, self._kinect.get_max_body_count()):
                     body = self._bodies.bodies[i]
                     if not body.is_tracked:
                         continue
@@ -316,8 +314,8 @@ class BodyGameRuntime(object):
             # Restore original background_image to what it was before drawing punches
             self._background_img = background_img_before_punch
 
-        # Close our Kinect sensor, close the window and quit.
-        self._kinect.close()
+        # quit
+        self._kinect.stop()
         pygame.quit()
 
 
