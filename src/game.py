@@ -6,16 +6,18 @@ import numpy as np
 import os
 import pygame
 import random
+import statistics
 import sys
 from from_root import from_root
 from PIL import Image, ImageOps
 from pykinect2 import PyKinectV2
-from pykinect2 import PyKinectRuntime
 from threading import Timer
 
 CRACK_PATHS = glob.glob(os.path.join(from_root("assets"), "cracks", "*.png"))
 PUNCH_PATH = os.path.join(from_root("assets"), "punch.png")
 CRACK_SOUNDS = glob.glob(os.path.join(from_root("assets"), "audio", "*.wav"))
+
+N = 6
 
 
 class BodyGameRuntime(object):
@@ -66,12 +68,20 @@ class BodyGameRuntime(object):
         # here we will store skeleton data
         self._bodies = None
 
-        # Create variables to store last 3 hand positions...
+        # Create variables to store last hand positions
         self._hl = []
         self._hr = []
-        # ... and last hand velocities
-        self._l_velocity = None
-        self._r_velocity = None
+
+        # And also the ones computed for drawing the punches (will be used for smoothing filtering)
+        self._punch_coord = {
+            "l": [],
+            "r": []
+        }
+
+        self._arm_lengths = {
+            "l": [],
+            "r": []
+        }
 
     def reset_screen(self):
         self._background_img = copy.deepcopy(self._orig_background_img)
@@ -115,6 +125,16 @@ class BodyGameRuntime(object):
         l_arm_length = kinect.joint_distance(joint_shoulder_l, joint_elbow_l) + kinect.joint_distance(joint_elbow_l, joint_wrist_l)
         r_arm_length = kinect.joint_distance(joint_shoulder_r, joint_elbow_r) + kinect.joint_distance(joint_elbow_r, joint_wrist_r)
 
+        self._arm_lengths["l"].append(l_arm_length)
+        if len(self._arm_lengths["l"]) > 50:
+            self._arm_lengths["l"] = self._arm_lengths["l"][-50:]
+        self._arm_lengths["r"].append(r_arm_length)
+        if len(self._arm_lengths["r"]) > 50:
+            self._arm_lengths["r"] = self._arm_lengths["r"][-50:]
+
+        l_arm_length = statistics.mean(self._arm_lengths["l"])
+        r_arm_length = statistics.mean(self._arm_lengths["r"])
+
         screen_w = self._frame_surface.get_width()
         screen_h = self._frame_surface.get_height()
 
@@ -130,16 +150,22 @@ class BodyGameRuntime(object):
         l_punch_coord = None
         if joints[PyKinectV2.JointType_HandLeft].TrackingState != PyKinectV2.TrackingState_NotTracked:
             new_hl_x = ((joint_hand_left.Position.x - neck_spine_m["x"]) * screen_w / shoulders_length) + (screen_w/2)
-            new_hl_y = ((joint_hand_left.Position.y - neck_spine_m["y"]) * screen_h / neck_spine_length) + (screen_h/2)
-            l_punch_coord = int(new_hl_x), int(new_hl_y)
-            self.add_punch(l_punch_coord[0], l_punch_coord[1], alpha=alpha_dist_l)
+            new_hl_y = -((joint_hand_left.Position.y - neck_spine_m["y"]) * screen_h / neck_spine_length) + (screen_h/2)
+            l_punch_coord = new_hl_x, new_hl_y
+            self.update_punch_coordinates(l_punch_coord, "l")
+            self.add_punch("l", alpha=alpha_dist_l)
+        else:
+            self.update_punch_coordinates(None, "l")
 
         r_punch_coord = None
         if joints[PyKinectV2.JointType_HandRight].TrackingState != PyKinectV2.TrackingState_NotTracked:
             new_hr_x = ((joint_hand_right.Position.x - neck_spine_m["x"]) * screen_w / shoulders_length) + (screen_w/2)
-            new_hr_y = ((joint_hand_right.Position.y - neck_spine_m["y"]) * screen_h / neck_spine_length) + (screen_h/2)
-            r_punch_coord = int(new_hr_x), int(new_hr_y)
-            self.add_punch(r_punch_coord[0], r_punch_coord[1], alpha=alpha_dist_r, flip=True)
+            new_hr_y = -((joint_hand_right.Position.y - neck_spine_m["y"]) * screen_h / neck_spine_length) + (screen_h/2)
+            r_punch_coord = new_hr_x, new_hr_y
+            self.update_punch_coordinates(r_punch_coord, "r")
+            self.add_punch("r", alpha=alpha_dist_r)
+        else:
+            self.update_punch_coordinates(None, "l")
 
         return l_punch_coord, r_punch_coord, alpha_dist_l == 255, alpha_dist_r == 255
 
@@ -161,7 +187,7 @@ class BodyGameRuntime(object):
 
         self.disable_draw_punch()
 
-    def add_punch(self, x, y, alpha=255, flip=False):
+    def add_punch(self, side, alpha=255):
         # Draw the punch at specific location, with specific size and opacity based on alpha
         punch = Image.open(PUNCH_PATH)
         screen_w = self._frame_surface.get_width()
@@ -182,10 +208,22 @@ class BodyGameRuntime(object):
                 new_pixels.append((item[0], item[1], item[2], a))
         punch.putdata(new_pixels)
 
-        if flip:
+        if side == "r":
             punch = ImageOps.mirror(punch)
 
-        self._background_img.paste(punch, (x, y), punch)
+        self._background_img.paste(punch, self.get_punch_filtered_coord(side), punch)
+
+    def get_punch_filtered_coord(self, side):
+        x = int(statistics.mean([x[0] for x in self._punch_coord[side] if side is not None]))
+        y = int(statistics.mean([x[1] for x in self._punch_coord[side] if side is not None]))
+
+        return x, y
+
+    def get_z_filtered_coord(self, side):
+        if side == "l":
+            return statistics.mean([x.Position.z for x in self._hl if x is not None])
+        else:
+            return statistics.mean([x.Position.z for x in self._hr if x is not None])
 
     def add_pip(self):
         # add PiP
@@ -201,7 +239,7 @@ class BodyGameRuntime(object):
 
         im_pil = Image.fromarray(ir_rgb).convert("RGBA")
 
-        #Resize image to 10% width
+        # Resize image to 10% width
         screen_w = self._frame_surface.get_width()
         screen_h = self._frame_surface.get_height()
         pip_w = int(screen_w * 0.1)
@@ -210,40 +248,43 @@ class BodyGameRuntime(object):
 
         self._background_img.paste(im_pil, (screen_w-pip_w-15, screen_h-pip_h-15), im_pil)
 
-    def get_h_joints_acceleration(self, joints):
-        # Compute hands joints acceleration
-        self._hl.append(joints[PyKinectV2.JointType_HandLeft])
-        self._hr.append(joints[PyKinectV2.JointType_HandRight])
-
-        if len(self._hl) == 1:
-            self._l_velocity = None
-            l_acc = None
-        elif len(self._hl) == 2:
-            self._l_velocity = kinect.joint_distance(self._hl[0], self._hl[1])
-            l_acc = None
-        elif len(self._hl) == 3:
-            self._l_velocity = kinect.joint_distance(self._hl[1], self._hl[2])
-            l_acc = self._l_velocity - kinect.joint_distance(self._hl[1], self._hl[0])
+    def update_hand_joints(self, joints):
+        if joints is None:
+            self._hl.append(None)
+            self._hr.append(None)
         else:
-            del self._hl[0]
-            self._l_velocity = kinect.joint_distance(self._hl[1], self._hl[2])
-            l_acc = self._l_velocity - kinect.joint_distance(self._hl[1], self._hl[0])
+            self._hl.append(joints[PyKinectV2.JointType_HandLeft])
+            self._hr.append(joints[PyKinectV2.JointType_HandRight])
 
-        if len(self._hr) == 1:
-            self._r_velocity = None
-            r_acc = None
-        elif len(self._hr) == 2:
-            self._r_velocity = kinect.joint_distance(self._hr[0], self._hr[1])
-            r_acc = None
-        elif len(self._hr) == 3:
-            self._r_velocity = kinect.joint_distance(self._hr[1], self._hr[2])
-            r_acc = self._r_velocity - kinect.joint_distance(self._hr[1], self._hr[0])
+        if len(self._hl) > N:
+            self._hl = self._hl[-N:]
+        if len(self._hr) > N:
+            self._hr = self._hr[-N:]
+
+    def update_punch_coordinates(self, punch_coord, side):
+        if punch_coord is None:
+            self._punch_coord[side].append(None)
         else:
-            del self._hr[0]
-            self._r_velocity = kinect.joint_distance(self._hr[1], self._hr[2])
-            r_acc = self._r_velocity - kinect.joint_distance(self._hr[1], self._hr[0])
+            self._punch_coord[side].append(punch_coord + (self.get_z_filtered_coord(side),))
+            if len(self._punch_coord[side]) > N:
+                self._punch_coord[side] = self._punch_coord[side][-N:]
 
-        return l_acc, r_acc
+    def get_h_joints_acceleration(self):
+        z_l = [x[2] for x in self._punch_coord["l"] if not(x is None)]
+        z_r = [x[2] for x in self._punch_coord["r"] if not(x is None)]
+
+        if len(z_l) == N:
+            # l_velocity = statistics.variance(z_l)
+            l_velocity = z_l[-1] - z_l[0]
+        else:
+            l_velocity = None
+        if len(z_r) == N:
+            # r_velocity = statistics.variance(z_r)
+            r_velocity = z_r[-1] - z_r[0]
+        else:
+            r_velocity = None
+
+        return l_velocity, r_velocity
 
     def run(self):
         # Main Program Loop
@@ -275,31 +316,38 @@ class BodyGameRuntime(object):
             background_img_before_punch = copy.deepcopy(self._background_img)
 
             if self._bodies is not None:
-                for i in range(0, self._kinect.get_max_body_count()):
-                    body = self._bodies.bodies[i]
+                joints_processed = False
+                for body in self._bodies.bodies:
                     if not body.is_tracked:
                         continue
 
                     joints = body.joints
+                    self.update_hand_joints(joints)
+                    joints_processed = True
 
                     l_punch_coord, r_punch_coord, punched_l, punched_r = self.draw_punch(joints)
-                    l_acc, r_acc = self.get_h_joints_acceleration(joints)
+                    l_acc, r_acc = self.get_h_joints_acceleration()
 
-                    if punched_l and (l_acc is not None) and (l_acc > 0.05):
-                        self.add_crack(*l_punch_coord, background_img_before_punch)
-                    if punched_r and (r_acc is not None) and (r_acc > 0.05):
-                        self.add_crack(*r_punch_coord, background_img_before_punch)
+                    if punched_l and (l_acc is not None) and (l_acc > 0.005):
+                        self.add_crack(*(self.get_punch_filtered_coord("l")), background_img_before_punch)
+                    if punched_r and (r_acc is not None) and (r_acc > 0.005):
+                        self.add_crack(*(self.get_punch_filtered_coord("r")), background_img_before_punch)
 
                     # No need to check for other bodies, use only one
                     break
 
                     # TODO automatic selection of nearest body
 
+                if not joints_processed:
+                    self.update_hand_joints(None)
+            else:
+                self.update_hand_joints(None)
+
             # Prepare surface
             self.set_surface_from_img(self._background_img)
             h_to_w = float(self._frame_surface.get_height()) / self._frame_surface.get_width()
             target_height = int(h_to_w * self._screen.get_width())
-            surface_to_draw = pygame.transform.scale(self._frame_surface, (self._screen.get_width(), target_height));
+            surface_to_draw = pygame.transform.scale(self._frame_surface, (self._screen.get_width(), target_height))
             self._screen.blit(surface_to_draw, (0, 0))
             surface_to_draw = None
 
