@@ -5,16 +5,25 @@ import os
 import pygame
 import random
 import sys
-from from_root import from_root
 from PIL import Image, ImageOps
 from threading import Timer
 
-from device_manager import HandJointsFrame
-from kinect_manager import KinectManager
+from core.device_manager import HandJointsFrame
+from core.kinect_manager import KinectManager
 
-CRACK_PATHS = glob.glob(os.path.join(from_root("assets"), "cracks", "*.png"))
-PUNCH_PATH = os.path.join(from_root("assets"), "punch.png")
-CRACK_SOUNDS = glob.glob(os.path.join(from_root("assets"), "audio", "*.wav"))
+
+def resource_path(relative_path=""):
+    try:
+        base_path = sys._MEIPASS
+    except AttributeError:
+        base_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
+
+    return os.path.join(base_path, relative_path)
+
+
+CRACK_PATHS = glob.glob(os.path.join(resource_path(), "assets", "cracks", "*.png"))
+PUNCH_PATH = resource_path(os.path.join("assets", "punch.png"))
+CRACK_SOUNDS = glob.glob(os.path.join(resource_path(), "assets", "audio", "*.wav"))
 
 
 class BodyGameRuntime(object):
@@ -204,7 +213,6 @@ class BodyGameRuntime(object):
                 l_acc, r_acc = self._kinect.get_hand_joints_velocities()
 
                 if punched_l and (l_acc is not None) and (l_acc > 0.4):
-                    print(l_acc)
                     self.add_crack(*l_punch_coord, background_img_before_punch)
                 if punched_r and (r_acc is not None) and (r_acc > 0.4):
                     self.add_crack(*r_punch_coord, background_img_before_punch)

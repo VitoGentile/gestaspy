@@ -4,8 +4,8 @@ from PIL import Image
 from pykinect2 import PyKinectRuntime, PyKinectV2
 from typing import Optional
 
-from device_manager import DeviceManager, DeviceNotStartedException, ColorFrame, HandJointsFrame
-from utils import joint_distance
+from core.device_manager import DeviceManager, DeviceNotStartedException, ColorFrame, HandJointsFrame
+from core.utils import joint_distance
 
 
 class KinectManager(DeviceManager):
