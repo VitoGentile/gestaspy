@@ -1,5 +1,5 @@
 # gestaspy
-A <b>Gest</b>ure-based <b>A</b>nti-<b>S</b>tress <b>Py</b>thon Game
+A **Gest**ure-based **A**nti-**S**tress **Py**thon Game
 
 ![gestaspy demo](./demo.gif)
 
@@ -15,7 +15,7 @@ gestaspy is currently supporting only Windows 10.
 ## How to play
 
 To play this game, you need to:
-- use/buy a Microsoft Kinect One (a.k.a. Kinect v2)
+- use/buy a Microsoft Kinect One (a.k.a. Kinect v2), along with its adapter for Windows
 - install the Kinect for Windows SDK 2.0 (you can find it at [this link](https://www.microsoft.com/en-us/download/details.aspx?id=44561))
 - run gestaspy (you can either build it from source or download the last build from [here](https://github.com/VitoGentile/gestaspy/releases))
 
@@ -31,15 +31,14 @@ To play this game, you need to:
    ```
 
 
-## Future Work
+## Future work
 There is a bunch of stuff to improve here, including:
 - add support for other Kinect-like devices, such as Intel RealSense-based ones
-- add support for 3D skeletal joint tracking based on RGB data (see for instance the [OpenPose](https://github.com/CMU-Perceptual-Computing-Lab/openpose) project) 
-- fix this project structure with anything else an open-source project would need, including information about how to contribute, license, configuration, testing, etc.
+- add support for 3D skeletal joint tracking based on RGB data (see for instance the [OpenPose](https://github.com/CMU-Perceptual-Computing-Lab/openpose) project)
 - add some score within the game
-- add support for different kind of gestures and different kind of actions to "break the desktop" :)
+- add support for different kinds of gestures and different kinds of actions to "break the desktop" :)
 - add support for different OSs
 
 
 ## Anything else
-I know, this project is missing a bunch of stuff but it's just a weekend project that has been in my mind for years. So if you want to help or have fun with it, just [contact me](https://vitogentile.it/)!
+I know, this project is missing a bunch of stuff, but it's just a weekend project that has been in my mind for years. So if you want to contribute or have fun with it, just [contact me](https://vitogentile.it/)!
