@@ -1,6 +1,8 @@
 # gestaspy
 A <b>Gest</b>ure-based <b>A</b>nti-<b>S</b>tress <b>Py</b>thon Game
 
+![gestaspy demo](./demo.gif)
+
 gestaspy is an anti-stress game that allows you to virtually break your desktop glass screen by punching the air. It is inspired by an old funny desktop application known as Desktop Destroyer Game (you can still download it from [here](http://www.desktop-destroyer.net/), or just have a look at how it works on [YouTube](https://www.youtube.com/watch?v=_4723FREaiw)).
 
 As suggested by the project name, gestaspy is written in Python, and it has been tested only with Python 3.7.9.
