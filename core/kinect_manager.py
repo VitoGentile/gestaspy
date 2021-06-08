@@ -191,20 +191,17 @@ class KinectManager(DeviceManager):
         if not self.is_device_started():
             raise DeviceNotStartedException("Device not started")
 
-        # TODO change to use color instead of IR
-        if self._kinect.has_new_infrared_frame():
-            if self._kinect.has_new_infrared_frame():
-                f = self._kinect.get_last_infrared_frame()
-            else:
-                return None
+        if self._kinect.has_new_color_frame():
+            f = self._kinect.get_last_color_frame()
+        else:
+            return None
 
-            ir_f8 = np.uint8(f.clip(1, 4000) / 16.)
-            ir_frame8bit = np.dstack((ir_f8, ir_f8, ir_f8))
-            ir_rgb = np.array(ir_frame8bit)
-            ir_h, ir_w = self._kinect.infrared_frame_desc.Height, self._kinect.infrared_frame_desc.Width
-            ir_rgb = ir_rgb.reshape((ir_h, ir_w, 3), order='C')
+        ir_rgb = np.array(f)
+        ir_w, ir_h = self._kinect.color_frame_desc.Width, self._kinect.color_frame_desc.Height
+        ir_rgb = ir_rgb.reshape((ir_h, ir_w, 4))
+        ir_rgb[:, :, [0, 2]] = ir_rgb[:, :, [2, 0]]
 
-            self._color_frame = ColorFrame(Image.fromarray(ir_rgb).convert("RGBA"))
+        self._color_frame = ColorFrame(Image.fromarray(ir_rgb).convert("RGBA"))
 
         return self._color_frame
 
@@ -217,9 +214,8 @@ class KinectManager(DeviceManager):
 
     def start_device(self):
         if not(self.is_device_started()):
-            # TODO change IR to color
             self._kinect = PyKinectRuntime.PyKinectRuntime(
-                PyKinectV2.FrameSourceTypes_Infrared | PyKinectV2.FrameSourceTypes_Body)
+                PyKinectV2.FrameSourceTypes_Color | PyKinectV2.FrameSourceTypes_Body)
 
     def is_device_started(self) -> bool:
         return not(self._kinect is None)

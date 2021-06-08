@@ -27,7 +27,7 @@ CRACK_SOUNDS = glob.glob(os.path.join(resource_path(), "assets", "audio", "*.wav
 
 
 class BodyGameRuntime(object):
-    def __init__(self, background_img, windowed_mode, show_pip):
+    def __init__(self, background_img, windowed_mode, show_pip, pip_size):
         pygame.init()
         pygame.mouse.set_visible(False)
 
@@ -40,6 +40,7 @@ class BodyGameRuntime(object):
 
         # True means the user wants a PiP is shown on the bottom right
         self._show_pip = show_pip
+        self._pip_size = pip_size
 
         # Set the width and height of the screen [width, height]
         self._infoObject = pygame.display.Info()
@@ -171,7 +172,7 @@ class BodyGameRuntime(object):
         # Resize image to 10% width
         screen_w = self._frame_surface.get_width()
         screen_h = self._frame_surface.get_height()
-        pip_w = int(screen_w * 0.1)
+        pip_w = int(screen_w * self._pip_size)
         im_pil.thumbnail([pip_w, sys.maxsize], Image.ANTIALIAS)
         pip_w, pip_h = im_pil.size
 
@@ -241,10 +242,10 @@ class BodyGameRuntime(object):
         pygame.quit()
 
 
-def start_game(windowed_mode=False, show_pip=False):
+def start_game(windowed_mode=False, show_pip=False, pip_size=0.1):
     with mss.mss() as sct:
         sct_img = sct.grab(sct.monitors[1])
         img = Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
 
-    game = BodyGameRuntime(img, windowed_mode, show_pip)
+    game = BodyGameRuntime(img, windowed_mode, show_pip, pip_size)
     game.run()
