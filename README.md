@@ -17,14 +17,21 @@ gestaspy is currently supporting only Windows 10.
 To play this game, you need to:
 - use/buy a Microsoft Kinect One (a.k.a. Kinect v2), along with its adapter for Windows
 - install the Kinect for Windows SDK 2.0 (you can find it at [this link](https://www.microsoft.com/en-us/download/details.aspx?id=44561))
-- run gestaspy (you can either build it from source or download the last build from [here](https://github.com/VitoGentile/gestaspy/releases))
+- run gestaspy. You have several options:
+   - run it directly from source:
+     ```
+     python cli.py
+     ```
+   - build it from source using pyinstaller (see below)
+   - download the last build from [here](https://github.com/VitoGentile/gestaspy/releases))
 
 
 ## How to build
 1. Install [pyinstaller](http://www.pyinstaller.org/):
    ```
-   pip install pyinstaller
+   pip install pyinstaller==3.5
    ```
+   (note that using a different version of pyinstaller makes the resulting .exe being recognized as a malware by some AV, including MS Defender)
 2. From the project root, run:
    ```
    pyinstaller gestaspy.spec --clean --name gestaspy --onefile
